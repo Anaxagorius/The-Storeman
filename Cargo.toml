@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/storeman-core", "crates/storeman-app"]
+resolver = "2"

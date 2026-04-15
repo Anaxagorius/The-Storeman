@@ -7,6 +7,7 @@ pub mod custody;
 pub mod transaction;
 pub mod user;
 pub mod controlled;
+pub mod equipment;
 
 pub use item::*;
 pub use location::*;
@@ -17,3 +18,4 @@ pub use custody::*;
 pub use transaction::*;
 pub use user::*;
 pub use controlled::*;
+pub use equipment::*;

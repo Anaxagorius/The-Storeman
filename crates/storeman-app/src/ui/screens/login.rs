@@ -51,7 +51,7 @@ pub fn show(
                     ui.label("Username");
                     let username_resp = ui.add(
                         egui::TextEdit::singleline(&mut state.username)
-                            .desired_width(f32::INFINITY)
+                            .desired_width(ui.available_width())
                             .hint_text("Enter username")
                     );
 
@@ -60,7 +60,7 @@ pub fn show(
                     let password_resp = ui.add(
                         egui::TextEdit::singleline(&mut state.password)
                             .password(true)
-                            .desired_width(f32::INFINITY)
+                            .desired_width(ui.available_width())
                             .hint_text("Enter password")
                     );
 
@@ -68,7 +68,7 @@ pub fn show(
 
                     let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
                     let login_clicked = ui.add_sized(
-                        Vec2::new(f32::INFINITY, 36.0),
+                        Vec2::new(ui.available_width(), 36.0),
                         egui::Button::new(RichText::new("Login").size(15.0))
                     ).clicked();
 

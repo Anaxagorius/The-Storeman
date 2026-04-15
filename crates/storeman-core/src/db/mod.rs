@@ -157,7 +157,8 @@ impl Database {
     pub fn get_item(&self, id: Uuid) -> Result<Option<Item>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, barcode, nsn, part_number, description, category, item_type, unit_of_issue,
-             controlled_category, reorder_point, shelf_life_days, notes, active, created_at, updated_at
+             controlled_category, reorder_point, shelf_life_days, notes, active, created_at, updated_at,
+             equipment_variant_id
              FROM items WHERE id = ?1"
         )?;
         let result = stmt.query_row(params![id.to_string()], row_to_item);
@@ -171,11 +172,13 @@ impl Database {
     pub fn list_items(&self, active_only: bool) -> Result<Vec<Item>> {
         let sql = if active_only {
             "SELECT id, barcode, nsn, part_number, description, category, item_type, unit_of_issue,
-             controlled_category, reorder_point, shelf_life_days, notes, active, created_at, updated_at
+             controlled_category, reorder_point, shelf_life_days, notes, active, created_at, updated_at,
+             equipment_variant_id
              FROM items WHERE active=1 ORDER BY description"
         } else {
             "SELECT id, barcode, nsn, part_number, description, category, item_type, unit_of_issue,
-             controlled_category, reorder_point, shelf_life_days, notes, active, created_at, updated_at
+             controlled_category, reorder_point, shelf_life_days, notes, active, created_at, updated_at,
+             equipment_variant_id
              FROM items ORDER BY description"
         };
         let mut stmt = self.conn.prepare(sql)?;
@@ -187,8 +190,8 @@ impl Database {
         self.conn.execute(
             "INSERT INTO items (id, barcode, nsn, part_number, description, category, item_type,
              unit_of_issue, controlled_category, reorder_point, shelf_life_days, notes, active,
-             created_at, updated_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+             created_at, updated_at, equipment_variant_id)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
             params![
                 item.id.to_string(), item.barcode, item.nsn, item.part_number,
                 item.description, item.category,
@@ -196,7 +199,8 @@ impl Database {
                 item.controlled_category.to_string(),
                 item.reorder_point, item.shelf_life_days, item.notes,
                 item.active as i64,
-                item.created_at.to_rfc3339(), item.updated_at.to_rfc3339()
+                item.created_at.to_rfc3339(), item.updated_at.to_rfc3339(),
+                item.equipment_variant_id.map(|u| u.to_string()),
             ],
         )?;
         Ok(())
@@ -207,14 +211,16 @@ impl Database {
         self.conn.execute(
             "UPDATE items SET barcode=?2, nsn=?3, part_number=?4, description=?5, category=?6,
              item_type=?7, unit_of_issue=?8, controlled_category=?9, reorder_point=?10,
-             shelf_life_days=?11, notes=?12, active=?13, updated_at=?14 WHERE id=?1",
+             shelf_life_days=?11, notes=?12, active=?13, updated_at=?14,
+             equipment_variant_id=?15 WHERE id=?1",
             params![
                 item.id.to_string(), item.barcode, item.nsn, item.part_number,
                 item.description, item.category,
                 item.item_type.to_string(), item.unit_of_issue,
                 item.controlled_category.to_string(),
                 item.reorder_point, item.shelf_life_days, item.notes,
-                item.active as i64, now
+                item.active as i64, now,
+                item.equipment_variant_id.map(|u| u.to_string()),
             ],
         )?;
         Ok(())
@@ -604,6 +610,161 @@ impl Database {
         }
         Ok(result)
     }
+
+    // ── Master Equipment Reference ─────────────────────────────────────────────
+
+    pub fn list_equipment_items(&self, active_only: bool) -> Result<Vec<EquipmentItem>> {
+        let sql = if active_only {
+            "SELECT id, common_name, official_designation, equipment_category,
+              nato_category_code, manufacturer, country_of_origin, service_branch,
+              status, introduction_year, notes, active
+             FROM equipment_items WHERE active=1 ORDER BY equipment_category, common_name"
+        } else {
+            "SELECT id, common_name, official_designation, equipment_category,
+              nato_category_code, manufacturer, country_of_origin, service_branch,
+              status, introduction_year, notes, active
+             FROM equipment_items ORDER BY equipment_category, common_name"
+        };
+        let mut stmt = self.conn.prepare(sql)?;
+        let rows = stmt.query_map([], row_to_equipment_item)?;
+        rows.map(|r| r.map_err(Into::into)).collect()
+    }
+
+    pub fn get_equipment_item(&self, id: Uuid) -> Result<Option<EquipmentItem>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, common_name, official_designation, equipment_category,
+              nato_category_code, manufacturer, country_of_origin, service_branch,
+              status, introduction_year, notes, active
+             FROM equipment_items WHERE id=?1",
+        )?;
+        let result = stmt.query_row(params![id.to_string()], row_to_equipment_item);
+        match result {
+            Ok(v) => Ok(Some(v)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn create_equipment_item(&self, eq: &EquipmentItem) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO equipment_items
+             (id, common_name, official_designation, equipment_category,
+              nato_category_code, manufacturer, country_of_origin, service_branch,
+              status, introduction_year, notes, active)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+            params![
+                eq.id.to_string(),
+                eq.common_name,
+                eq.official_designation,
+                eq.equipment_category.to_string(),
+                eq.nato_category_code,
+                eq.manufacturer,
+                eq.country_of_origin,
+                eq.service_branch.to_string(),
+                eq.status.to_string(),
+                eq.introduction_year,
+                eq.notes,
+                eq.active as i64,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_equipment_item(&self, eq: &EquipmentItem) -> Result<()> {
+        self.conn.execute(
+            "UPDATE equipment_items SET
+              common_name=?2, official_designation=?3, equipment_category=?4,
+              nato_category_code=?5, manufacturer=?6, country_of_origin=?7,
+              service_branch=?8, status=?9, introduction_year=?10, notes=?11, active=?12
+             WHERE id=?1",
+            params![
+                eq.id.to_string(),
+                eq.common_name,
+                eq.official_designation,
+                eq.equipment_category.to_string(),
+                eq.nato_category_code,
+                eq.manufacturer,
+                eq.country_of_origin,
+                eq.service_branch.to_string(),
+                eq.status.to_string(),
+                eq.introduction_year,
+                eq.notes,
+                eq.active as i64,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_equipment_variants(&self, equipment_id: Uuid) -> Result<Vec<EquipmentVariant>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, equipment_id, variant_name, calibre_or_spec, compatible_accessories, notes
+             FROM equipment_variants WHERE equipment_id=?1 ORDER BY variant_name",
+        )?;
+        let rows = stmt.query_map(params![equipment_id.to_string()], row_to_equipment_variant)?;
+        rows.map(|r| r.map_err(Into::into)).collect()
+    }
+
+    pub fn list_all_equipment_variants(&self) -> Result<Vec<EquipmentVariant>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, equipment_id, variant_name, calibre_or_spec, compatible_accessories, notes
+             FROM equipment_variants ORDER BY variant_name",
+        )?;
+        let rows = stmt.query_map([], row_to_equipment_variant)?;
+        rows.map(|r| r.map_err(Into::into)).collect()
+    }
+
+    pub fn get_equipment_variant(&self, id: Uuid) -> Result<Option<EquipmentVariant>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, equipment_id, variant_name, calibre_or_spec, compatible_accessories, notes
+             FROM equipment_variants WHERE id=?1",
+        )?;
+        let result = stmt.query_row(params![id.to_string()], row_to_equipment_variant);
+        match result {
+            Ok(v) => Ok(Some(v)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn create_equipment_variant(&self, v: &EquipmentVariant) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO equipment_variants
+             (id, equipment_id, variant_name, calibre_or_spec, compatible_accessories, notes)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+            params![
+                v.id.to_string(),
+                v.equipment_id.to_string(),
+                v.variant_name,
+                v.calibre_or_spec,
+                v.compatible_accessories,
+                v.notes,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_nato_references(&self, variant_id: Uuid) -> Result<Vec<NatoReference>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, variant_id, nsn, nato_reporting_name
+             FROM nato_references WHERE variant_id=?1",
+        )?;
+        let rows = stmt.query_map(params![variant_id.to_string()], row_to_nato_reference)?;
+        rows.map(|r| r.map_err(Into::into)).collect()
+    }
+
+    pub fn upsert_nato_reference(&self, nr: &NatoReference) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO nato_references (id, variant_id, nsn, nato_reporting_name)
+             VALUES (?1,?2,?3,?4)",
+            params![
+                nr.id.to_string(),
+                nr.variant_id.to_string(),
+                nr.nsn,
+                nr.nato_reporting_name,
+            ],
+        )?;
+        Ok(())
+    }
 }
 
 // ── Row mappers ────────────────────────────────────────────────────────────────
@@ -627,6 +788,9 @@ fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<Item> {
         active: active != 0,
         created_at: parse_dt(&row.get::<_, String>(13)?),
         updated_at: parse_dt(&row.get::<_, String>(14)?),
+        equipment_variant_id: row.get::<_, Option<String>>(15)?
+            .as_deref()
+            .and_then(|s| Uuid::parse_str(s).ok()),
     })
 }
 
@@ -783,4 +947,45 @@ fn role_to_str(r: &Role) -> &'static str {
         Role::Inspector => "Inspector",
         Role::Admin => "Admin",
     }
+}
+
+fn row_to_equipment_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<EquipmentItem> {
+    use crate::models::equipment::{
+        parse_equipment_category, parse_service_branch, parse_equipment_status,
+    };
+    let active: i64 = row.get(11)?;
+    Ok(EquipmentItem {
+        id: Uuid::parse_str(&row.get::<_, String>(0)?).unwrap_or_default(),
+        common_name: row.get(1)?,
+        official_designation: row.get(2)?,
+        equipment_category: parse_equipment_category(&row.get::<_, String>(3)?),
+        nato_category_code: row.get(4)?,
+        manufacturer: row.get(5)?,
+        country_of_origin: row.get(6)?,
+        service_branch: parse_service_branch(&row.get::<_, String>(7)?),
+        status: parse_equipment_status(&row.get::<_, String>(8)?),
+        introduction_year: row.get(9)?,
+        notes: row.get(10)?,
+        active: active != 0,
+    })
+}
+
+fn row_to_equipment_variant(row: &rusqlite::Row<'_>) -> rusqlite::Result<EquipmentVariant> {
+    Ok(EquipmentVariant {
+        id: Uuid::parse_str(&row.get::<_, String>(0)?).unwrap_or_default(),
+        equipment_id: Uuid::parse_str(&row.get::<_, String>(1)?).unwrap_or_default(),
+        variant_name: row.get(2)?,
+        calibre_or_spec: row.get(3)?,
+        compatible_accessories: row.get(4)?,
+        notes: row.get(5)?,
+    })
+}
+
+fn row_to_nato_reference(row: &rusqlite::Row<'_>) -> rusqlite::Result<NatoReference> {
+    Ok(NatoReference {
+        id: Uuid::parse_str(&row.get::<_, String>(0)?).unwrap_or_default(),
+        variant_id: Uuid::parse_str(&row.get::<_, String>(1)?).unwrap_or_default(),
+        nsn: row.get(2)?,
+        nato_reporting_name: row.get(3)?,
+    })
 }

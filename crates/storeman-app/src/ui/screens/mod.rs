@@ -7,6 +7,7 @@ pub mod returns;
 pub mod stocktake;
 pub mod reports;
 pub mod admin;
+pub mod equipment_ref;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Screen {
@@ -19,4 +20,5 @@ pub enum Screen {
     Stocktake,
     Reports,
     Admin,
+    EquipmentRef,
 }

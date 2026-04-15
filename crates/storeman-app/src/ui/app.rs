@@ -2,7 +2,7 @@ use eframe::egui::{self, Color32, RichText, ScrollArea};
 use storeman_core::{Database, User, authenticate};
 
 use crate::ui::theme::{self, *};
-use crate::ui::screens::{Screen, login, dashboard, items, receive, issue, returns, stocktake, reports, admin};
+use crate::ui::screens::{Screen, login, dashboard, items, receive, issue, returns, stocktake, reports, admin, equipment_ref};
 
 pub struct StoremanApp {
     db: Database,
@@ -18,6 +18,7 @@ pub struct StoremanApp {
     stocktake_state: stocktake::StocktakeState,
     reports_state: reports::ReportsState,
     admin_state: admin::AdminState,
+    equipment_ref_state: equipment_ref::EquipmentRefState,
 }
 
 impl StoremanApp {
@@ -36,6 +37,7 @@ impl StoremanApp {
             stocktake_state: Default::default(),
             reports_state: Default::default(),
             admin_state: Default::default(),
+            equipment_ref_state: Default::default(),
         }
     }
 
@@ -63,6 +65,7 @@ impl StoremanApp {
                     ("↩ Returns", Screen::Returns),
                     ("🔢 Stocktake", Screen::Stocktake),
                     ("📋 Reports", Screen::Reports),
+                    ("🔭 Equip. Ref.", Screen::EquipmentRef),
                     ("⚙ Admin", Screen::Admin),
                 ];
 
@@ -201,6 +204,11 @@ impl eframe::App for StoremanApp {
                             admin::show(ui, &self.db, &user, &mut state);
                         });
                         self.admin_state = state;
+                    }
+                    Screen::EquipmentRef => {
+                        let mut state = std::mem::take(&mut self.equipment_ref_state);
+                        equipment_ref::show(ui, &self.db, &user, &mut state);
+                        self.equipment_ref_state = state;
                     }
                 }
             });

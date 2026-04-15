@@ -59,6 +59,8 @@ pub struct Item {
     pub active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Optional link to the Master Equipment Reference variant for this item.
+    pub equipment_variant_id: Option<Uuid>,
 }
 
 impl Item {
